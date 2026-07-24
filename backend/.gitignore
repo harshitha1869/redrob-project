@@ -1,0 +1,11 @@
+**pycache**/
+*.pyc
+.venv/
+venv/
+.env
+.ipynb_checkpoints/
+uploads/
+.idea/
+.vscode/
+
+data/candidates.jsonl
