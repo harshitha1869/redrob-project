@@ -1,2 +1,22 @@
+[project]
+name = "talentmind-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "pandas",
+    "numpy",
+    "python-docx",
+    "tqdm",
+    "sentence-transformers",
+    "torch",
+    "scikit-learn",
+    "python-dotenv",
+    "google-genai",
+]
+
 [tool.vercel]
 entrypoint = "api:app"
