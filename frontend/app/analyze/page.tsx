@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-
 type AnalysisResult = {
   ats_score?: number;
   semantic_match?: number;
@@ -28,85 +27,86 @@ export default function Analyze() {
   // ==========================================
   // PDF TEXT EXTRACTION
   // ==========================================
-const handleFileChange = async (
-  e: React.ChangeEvent<HTMLInputElement>
-) => {
-  const selectedFile = e.target.files?.[0];
 
-  if (!selectedFile) {
-    return;
-  }
+  const handleFileChange = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const selectedFile = e.target.files?.[0];
 
-  if (selectedFile.type !== "application/pdf") {
-    alert("Please upload a PDF file.");
-    return;
-  }
-
-  setFile(selectedFile);
-  setExtracting(true);
-  setResult(null);
-
-  try {
-    console.log("Reading PDF:", selectedFile.name);
-
-    // Import PDF.js ONLY in the browser
-    const pdfjsLib = await import(
-      "pdfjs-dist/legacy/build/pdf.mjs"
-    );
-
-    const arrayBuffer = await selectedFile.arrayBuffer();
-
-    const pdf = await pdfjsLib.getDocument({
-      data: arrayBuffer,
-      disableWorker: true,
-    }).promise;
-
-    console.log("PDF pages:", pdf.numPages);
-
-    let extractedText = "";
-
-    for (
-      let pageNumber = 1;
-      pageNumber <= pdf.numPages;
-      pageNumber++
-    ) {
-      const page = await pdf.getPage(pageNumber);
-
-      const textContent = await page.getTextContent();
-
-      const pageText = textContent.items
-        .map((item: any) => item.str || "")
-        .join(" ");
-
-      extractedText += pageText + "\n";
-    }
-
-    extractedText = extractedText.trim();
-
-    console.log(
-      "Extracted resume characters:",
-      extractedText.length
-    );
-
-    if (!extractedText) {
-      alert(
-        "No text could be extracted from this PDF. Please paste your resume manually."
-      );
+    if (!selectedFile) {
       return;
     }
 
-    setResume(extractedText);
+    if (selectedFile.type !== "application/pdf") {
+      alert("Please upload a PDF file.");
+      return;
+    }
 
-  } catch (error) {
-    console.error("PDF extraction error:", error);
+    setFile(selectedFile);
+    setExtracting(true);
+    setResult(null);
 
-    alert(
-      "Failed to read the PDF. Please paste your resume manually."
-    );
-  } finally {
-    setExtracting(false);
-  }
-};
+    try {
+      console.log("Reading PDF:", selectedFile.name);
+
+      const arrayBuffer = await selectedFile.arrayBuffer();
+
+      const pdf = await pdfjsLib.getDocument({
+        data: arrayBuffer,
+        disableWorker: true,
+      }).promise;
+
+      console.log("PDF pages:", pdf.numPages);
+
+      let extractedText = "";
+
+      for (
+        let pageNumber = 1;
+        pageNumber <= pdf.numPages;
+        pageNumber++
+      ) {
+        const page = await pdf.getPage(pageNumber);
+
+        const textContent = await page.getTextContent();
+
+        const pageText = textContent.items
+          .map((item: any) => item.str || "")
+          .join(" ");
+
+        extractedText += pageText + "\n";
+      }
+
+      extractedText = extractedText.trim();
+
+      console.log(
+        "Extracted resume characters:",
+        extractedText.length
+      );
+
+      console.log(
+        "Extracted resume:",
+        extractedText
+      );
+
+      if (!extractedText) {
+        alert(
+          "No text could be extracted from this PDF. Please paste your resume manually."
+        );
+        return;
+      }
+
+      setResume(extractedText);
+
+    } catch (error) {
+      console.error("PDF extraction error:", error);
+
+      alert(
+        "Failed to read the PDF. Please paste your resume manually."
+      );
+    } finally {
+      setExtracting(false);
+    }
+  };
 
   // ==========================================
   // ANALYZE RESUME
