@@ -11,9 +11,6 @@ dependencies = [
     "numpy",
     "python-docx",
     "tqdm",
-    "sentence-transformers",
-    "torch",
-    "scikit-learn",
     "python-dotenv",
     "google-genai",
 ]
