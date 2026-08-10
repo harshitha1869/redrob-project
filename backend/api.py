@@ -22,12 +22,8 @@ app = FastAPI(title="TalentMind AI API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://redrob-project-28xa.vercel.app",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -60,12 +56,26 @@ def home():
 @app.post("/analyze")
 def analyze(request: AnalyzeRequest):
 
+    # Validate input
+    if not request.resume.strip():
+        return {
+            "error": "Resume is empty. Please upload or enter a resume."
+        }
+
+    if not request.job_description.strip():
+        return {
+            "error": "Job description is empty. Please enter a job description."
+        }
+
+    # Parse resume
     candidate = parse_resume(request.resume)
 
+    # Analyze job description
     requirements = analyze_jd_text(
         request.job_description
     )
 
+    # Semantic similarity
     semantic = float(
         similarity_score(
             request.resume,
@@ -73,6 +83,7 @@ def analyze(request: AnalyzeRequest):
         )
     )
 
+    # Individual scores
     tech = technical_score(
         candidate,
         requirements
@@ -87,6 +98,7 @@ def analyze(request: AnalyzeRequest):
         candidate
     )
 
+    # Overall ATS score
     ats = round(
         (
             semantic * 100
@@ -96,6 +108,7 @@ def analyze(request: AnalyzeRequest):
         ) / 4
     )
 
+    # Required skills
     required = requirements.get(
         "required_skills",
         []
@@ -113,6 +126,7 @@ def analyze(request: AnalyzeRequest):
         if skill not in matched
     ]
 
+    # Gemini feedback
     feedback = generate_resume_feedback(
         request.resume,
         request.job_description,
