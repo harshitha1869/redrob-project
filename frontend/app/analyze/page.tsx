@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
 
 type AnalysisResult = {
   ats_score?: number;
@@ -20,6 +21,7 @@ export default function Analyze() {
   const [resume, setResume] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [result, setResult] = useState<AnalysisResult | null>(null);
+
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -37,14 +39,20 @@ export default function Analyze() {
       return;
     }
 
-    if (selectedFile.type !== "application/pdf") {
+    // Check file type
+    if (
+      selectedFile.type !== "application/pdf" &&
+      !selectedFile.name.toLowerCase().endsWith(".pdf")
+    ) {
       alert("Please upload a PDF file.");
+      e.target.value = "";
       return;
     }
 
     setFile(selectedFile);
     setExtracting(true);
     setResult(null);
+    setResume("");
 
     try {
       console.log("Reading PDF:", selectedFile.name);
@@ -52,7 +60,7 @@ export default function Analyze() {
       const arrayBuffer = await selectedFile.arrayBuffer();
 
       const pdf = await pdfjsLib.getDocument({
-        data: arrayBuffer,
+        data: new Uint8Array(arrayBuffer),
         disableWorker: true,
       }).promise;
 
@@ -70,7 +78,13 @@ export default function Analyze() {
         const textContent = await page.getTextContent();
 
         const pageText = textContent.items
-          .map((item: any) => item.str || "")
+          .map((item: any) => {
+            if ("str" in item) {
+              return item.str;
+            }
+
+            return "";
+          })
           .join(" ");
 
         extractedText += pageText + "\n";
@@ -83,22 +97,20 @@ export default function Analyze() {
         extractedText.length
       );
 
-      console.log(
-        "Extracted resume:",
-        extractedText
-      );
-
       if (!extractedText) {
         alert(
-          "No text could be extracted from this PDF. Please paste your resume manually."
+          "No text could be extracted from this PDF. Please make sure your PDF contains selectable text, or paste your resume manually."
         );
         return;
       }
 
       setResume(extractedText);
 
+      console.log("Resume extraction successful.");
     } catch (error) {
       console.error("PDF extraction error:", error);
+
+      setResume("");
 
       alert(
         "Failed to read the PDF. Please paste your resume manually."
@@ -116,6 +128,7 @@ export default function Analyze() {
     try {
       console.log("Analyze button clicked");
 
+      // Validate resume
       if (!resume.trim()) {
         alert(
           "Please upload a resume PDF or paste your resume."
@@ -123,6 +136,7 @@ export default function Analyze() {
         return;
       }
 
+      // Validate job description
       if (!jobDescription.trim()) {
         alert(
           "Please enter the job description."
@@ -143,62 +157,113 @@ export default function Analyze() {
         jobDescription.length
       );
 
+      // ==========================================
+      // API URL
+      // ==========================================
+
       const apiUrl =
-        process.env.NEXT_PUBLIC_API_URL;
+        process.env.NEXT_PUBLIC_API_URL?.trim();
 
       if (!apiUrl) {
         throw new Error(
-          "NEXT_PUBLIC_API_URL is not configured."
+          "NEXT_PUBLIC_API_URL is not configured. Please add it to your Vercel environment variables."
         );
       }
 
-      const response = await fetch(
-        `${apiUrl}/analyze`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            resume: resume,
-            job_description: jobDescription,
-          }),
-        }
+      // Remove trailing slash
+      const cleanApiUrl = apiUrl.replace(/\/+$/, "");
+
+      const endpoint = `${cleanApiUrl}/analyze`;
+
+      console.log("Calling API:", endpoint);
+
+      // ==========================================
+      // API REQUEST
+      // ==========================================
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          resume: resume.trim(),
+          job_description: jobDescription.trim(),
+        }),
+      });
+
+      console.log(
+        "API status:",
+        response.status
       );
 
-      const data = await response.json();
+      // ==========================================
+      // READ RESPONSE
+      // ==========================================
+
+      let data: AnalysisResult;
+
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          `Backend returned an invalid response. HTTP status: ${response.status}`
+        );
+      }
 
       console.log(
         "API Response:",
         JSON.stringify(data, null, 2)
       );
 
+      // ==========================================
+      // HANDLE HTTP ERRORS
+      // ==========================================
+
       if (!response.ok) {
         throw new Error(
-          data.error ||
-          `API request failed: ${response.status}`
+          data?.error ||
+            `API request failed with status ${response.status}`
         );
       }
 
-      if (data.error) {
+      // ==========================================
+      // HANDLE BACKEND ERROR
+      // ==========================================
+
+      if (data?.error) {
         throw new Error(data.error);
       }
+
+      // ==========================================
+      // SUCCESS
+      // ==========================================
 
       setResult(data);
 
     } catch (error) {
-      console.error("ERROR:", error);
+      console.error(
+        "Analyze error:",
+        error
+      );
 
-      alert(
+      const message =
         error instanceof Error
           ? error.message
-          : "Failed to analyze resume."
-      );
+          : "Failed to analyze resume.";
+
+      alert(message);
 
     } finally {
       setLoading(false);
     }
   };
+
+  // ==========================================
+  // UI
+  // ==========================================
 
   return (
     <div className="min-h-screen bg-slate-950 text-white p-8">
@@ -227,7 +292,9 @@ export default function Analyze() {
 
       <div className="grid md:grid-cols-2 gap-8">
 
-        {/* Resume */}
+        {/* =========================
+            RESUME
+        ========================== */}
 
         <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl p-6">
 
@@ -240,6 +307,7 @@ export default function Analyze() {
             accept=".pdf,application/pdf"
             className="mb-4 w-full rounded-lg border border-slate-700 bg-slate-900 p-3"
             onChange={handleFileChange}
+            disabled={extracting || loading}
           />
 
           {file && (
@@ -260,8 +328,9 @@ export default function Analyze() {
               setResume(e.target.value)
             }
             rows={12}
-            className="w-full rounded-xl bg-slate-900 border border-slate-700 p-4"
+            className="w-full rounded-xl bg-slate-900 border border-slate-700 p-4 outline-none focus:border-cyan-500"
             placeholder="Upload a PDF or paste resume content..."
+            disabled={extracting || loading}
           />
 
           {resume && (
@@ -273,7 +342,9 @@ export default function Analyze() {
         </div>
 
 
-        {/* Job Description */}
+        {/* =========================
+            JOB DESCRIPTION
+        ========================== */}
 
         <div className="bg-white/5 backdrop-blur-lg border border-white/10 rounded-3xl p-6">
 
@@ -287,9 +358,14 @@ export default function Analyze() {
               setJobDescription(e.target.value)
             }
             rows={12}
-            className="w-full rounded-xl bg-slate-900 border border-slate-700 p-4"
+            className="w-full rounded-xl bg-slate-900 border border-slate-700 p-4 outline-none focus:border-cyan-500"
             placeholder="Paste job description..."
+            disabled={loading}
           />
+
+          <p className="text-xs text-slate-500 mt-2">
+            {jobDescription.length} characters
+          </p>
 
         </div>
 
@@ -307,11 +383,13 @@ export default function Analyze() {
           disabled={loading || extracting}
           className="px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
+
           {extracting
             ? "Reading Resume..."
             : loading
             ? "Analyzing..."
             : "Analyze Resume"}
+
         </button>
 
       </div>
@@ -325,56 +403,95 @@ export default function Analyze() {
 
         <div className="mt-12">
 
-          {/* Scores */}
+          {/* =========================
+              SCORES
+          ========================== */}
 
           <div className="grid md:grid-cols-3 gap-6">
 
+            {/* ATS */}
+
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+
               <h3>ATS Score</h3>
+
               <p className="text-4xl font-bold">
-                {result.ats_score}
+                {result.ats_score ?? 0}
               </p>
+
             </div>
 
+
+            {/* Semantic */}
+
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+
               <h3>Semantic Match</h3>
+
               <p className="text-4xl font-bold">
-                {result.semantic_match}
+                {result.semantic_match ?? 0}
               </p>
+
             </div>
 
+
+            {/* Technical */}
+
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+
               <h3>Technical Score</h3>
+
               <p className="text-4xl font-bold">
-                {result.technical_score}
+                {result.technical_score ?? 0}
               </p>
+
             </div>
 
+
+            {/* Career */}
+
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+
               <h3>Career Score</h3>
+
               <p className="text-4xl font-bold">
-                {result.career_score}
+                {result.career_score ?? 0}
               </p>
+
             </div>
 
+
+            {/* Behavioral */}
+
             <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+
               <h3>Behavior Score</h3>
+
               <p className="text-4xl font-bold">
-                {result.behavioral_score}
+                {result.behavioral_score ?? 0}
               </p>
+
             </div>
+
+
+            {/* Recommendation */}
 
             <div className="bg-gradient-to-r from-blue-600 to-cyan-500 rounded-2xl p-6">
+
               <h3>Recommendation</h3>
+
               <p className="text-3xl font-bold">
-                {result.recommendation}
+                {result.recommendation ?? "N/A"}
               </p>
+
             </div>
 
           </div>
 
 
-          {/* Skill Gap Analysis */}
+          {/* =========================
+              SKILL GAP ANALYSIS
+          ========================== */}
 
           <div className="grid md:grid-cols-3 gap-6 mt-8">
 
@@ -387,15 +504,25 @@ export default function Analyze() {
               </h3>
 
               {result.required_skills?.length ? (
-                result.required_skills.map(
-                  (skill) => (
-                    <p key={skill}>
-                      • {skill}
-                    </p>
-                  )
-                )
+
+                <div className="space-y-2">
+
+                  {result.required_skills.map(
+                    (skill, index) => (
+                      <p key={`${skill}-${index}`}>
+                        • {skill}
+                      </p>
+                    )
+                  )}
+
+                </div>
+
               ) : (
-                <p>No skills detected</p>
+
+                <p className="text-slate-400">
+                  No skills detected
+                </p>
+
               )}
 
             </div>
@@ -410,15 +537,25 @@ export default function Analyze() {
               </h3>
 
               {result.matched_skills?.length ? (
-                result.matched_skills.map(
-                  (skill) => (
-                    <p key={skill}>
-                      ✅ {skill}
-                    </p>
-                  )
-                )
+
+                <div className="space-y-2">
+
+                  {result.matched_skills.map(
+                    (skill, index) => (
+                      <p key={`${skill}-${index}`}>
+                        ✅ {skill}
+                      </p>
+                    )
+                  )}
+
+                </div>
+
               ) : (
-                <p>No matched skills</p>
+
+                <p className="text-slate-400">
+                  No matched skills
+                </p>
+
               )}
 
             </div>
@@ -433,15 +570,25 @@ export default function Analyze() {
               </h3>
 
               {result.missing_skills?.length ? (
-                result.missing_skills.map(
-                  (skill) => (
-                    <p key={skill}>
-                      ❌ {skill}
-                    </p>
-                  )
-                )
+
+                <div className="space-y-2">
+
+                  {result.missing_skills.map(
+                    (skill, index) => (
+                      <p key={`${skill}-${index}`}>
+                        ❌ {skill}
+                      </p>
+                    )
+                  )}
+
+                </div>
+
               ) : (
-                <p>No missing skills</p>
+
+                <p className="text-slate-400">
+                  No missing skills
+                </p>
+
               )}
 
             </div>
@@ -449,7 +596,9 @@ export default function Analyze() {
           </div>
 
 
-          {/* AI Feedback */}
+          {/* =========================
+              AI FEEDBACK
+          ========================== */}
 
           <div className="mt-8 bg-white/5 border border-white/10 rounded-2xl p-6">
 
@@ -458,18 +607,23 @@ export default function Analyze() {
             </h3>
 
             {result.ai_feedback ? (
+
               <div className="whitespace-pre-wrap text-slate-300 leading-8">
                 {result.ai_feedback}
               </div>
+
             ) : (
+
               <p className="text-slate-500">
                 No AI feedback available.
               </p>
+
             )}
 
           </div>
 
         </div>
+
       )}
 
     </div>
