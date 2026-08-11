@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import * as pdfjsLib from "pdfjs-dist/legacy/build/pdf.mjs";
+pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
 type AnalysisResult = {
   ats_score?: number;
@@ -58,12 +59,9 @@ export default function Analyze() {
       console.log("Reading PDF:", selectedFile.name);
 
       const arrayBuffer = await selectedFile.arrayBuffer();
-
-      const pdf = await pdfjsLib.getDocument({
-        data: new Uint8Array(arrayBuffer),
-        disableWorker: true,
-      }).promise;
-
+const pdf = await pdfjsLib.getDocument({
+  data: new Uint8Array(arrayBuffer),
+}).promise;
       console.log("PDF pages:", pdf.numPages);
 
       let extractedText = "";
